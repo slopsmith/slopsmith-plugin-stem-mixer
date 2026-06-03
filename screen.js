@@ -607,9 +607,14 @@
         if (hideStylesInstalled) return;
         const style = document.createElement('style');
         style.id = 'stem-mixer-hide-stems-ui';
+        // Cover both the legacy transport and the v3 plugin-control slot, where
+        // the stems plugin now mounts #stems-mixer (host re-homing in v3 also
+        // moves it out of #player-controls), so the hide rule keeps matching.
         style.textContent = [
             '#player-controls #stems-mixer { display: none !important; }',
-            '#player-controls [data-stems-ui] { display: none !important; }'
+            '#player-controls [data-stems-ui] { display: none !important; }',
+            '#v3-plugin-controls-slot #stems-mixer { display: none !important; }',
+            '#v3-plugin-controls-slot [data-stems-ui] { display: none !important; }'
         ].join('\n');
         document.head.appendChild(style);
         hideStylesInstalled = true;
@@ -1017,11 +1022,18 @@
     }
 
     function ensureMixerButton() {
-        const controls = document.getElementById('player-controls');
+        // v3: mount into the host's stable plugin-control slot (Plugins rail
+        // popover). The legacy `button:last-child` anchor resolves to a NESTED
+        // transport button in v3 and would throw on insertBefore; the slot is
+        // always present in v3, so that anchor is only used in the classic UI.
+        const slot = (window.slopsmith && window.slopsmith.uiVersion === 'v3'
+            && window.slopsmith.ui && typeof window.slopsmith.ui.playerControlSlot === 'function')
+            ? window.slopsmith.ui.playerControlSlot() : null;
+        const controls = slot || document.getElementById('player-controls');
         if (!controls) return;
         if (mixerButton && document.body.contains(mixerButton)) return;
 
-        const closeBtn = controls.querySelector('button:last-child');
+        const closeBtn = slot ? null : controls.querySelector('button:last-child');
         const btn = document.createElement('button');
         btn.id = 'btn-stem-mixer';
         btn.className = 'px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition';
