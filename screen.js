@@ -1045,6 +1045,11 @@
             try { const _s = window.slopsmith.ui.playerControlSlot(); if (_s instanceof Element) slot = _s; }
             catch (_e) { /* host slot API failure → fall back to legacy container */ }
         }
+        // In v3 mount EXCLUSIVELY into the slot. If the slot isn't resolvable
+        // yet, bail rather than append to #player-controls — appending there
+        // would strand the button (the document.body.contains guard below would
+        // then keep it from ever migrating into the slot on a later update).
+        if (isV3 && !slot) return;
         const controls = slot || document.getElementById('player-controls');
         if (!controls) return;
         if (mixerButton && document.body.contains(mixerButton)) return;
