@@ -574,8 +574,19 @@
     }
 
     function hideDefaultStemButtons() {
-        const controls = document.getElementById('player-controls');
-        if (!controls) return;
+        // In v3 the stems plugin mounts #stems-mixer into the host plugin-control
+        // slot (the host also re-homes it out of #player-controls), so search
+        // BOTH containers. Hiding via inline style.display is what the host's
+        // plugin-slot badge/empty-state counter recognises (a CSS-rule hide
+        // alone would leave the element counted as a visible control).
+        let slot = null;
+        if (window.slopsmith && window.slopsmith.uiVersion === 'v3'
+            && window.slopsmith.ui && typeof window.slopsmith.ui.playerControlSlot === 'function') {
+            try { const _s = window.slopsmith.ui.playerControlSlot(); if (_s instanceof Element) slot = _s; }
+            catch (_e) { /* ignore */ }
+        }
+        const containers = [document.getElementById('player-controls'), slot].filter(Boolean);
+        if (!containers.length) return;
 
         const stemTokens = ['stem', 'stems', 'guitar', 'bass', 'voice', 'vocals', 'vocal', 'drums', 'drum', 'piano', 'other'];
         const normalize = (txt) => String(txt || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -586,20 +597,22 @@
             return stemTokens.some(token => n.includes(token));
         };
 
-        const stemsContainer = controls.querySelector('#stems-mixer');
-        if (stemsContainer) {
-            stemsContainer.style.display = 'none';
-            stemsContainer.dataset.stemMixerHidden = '1';
-        }
-
-        controls.querySelectorAll('button, span, div, a').forEach((el) => {
-            if (el.id === 'btn-stem-mixer') return;
-            const txt = (el.textContent || '').trim();
-            if (!txt || txt.length > 18) return;
-            if (looksLikeStemControl(txt)) {
-                el.style.display = 'none';
-                el.dataset.stemMixerHidden = '1';
+        containers.forEach((controls) => {
+            const stemsContainer = controls.querySelector('#stems-mixer');
+            if (stemsContainer) {
+                stemsContainer.style.display = 'none';
+                stemsContainer.dataset.stemMixerHidden = '1';
             }
+
+            controls.querySelectorAll('button, span, div, a').forEach((el) => {
+                if (el.id === 'btn-stem-mixer') return;
+                const txt = (el.textContent || '').trim();
+                if (!txt || txt.length > 18) return;
+                if (looksLikeStemControl(txt)) {
+                    el.style.display = 'none';
+                    el.dataset.stemMixerHidden = '1';
+                }
+            });
         });
     }
 
