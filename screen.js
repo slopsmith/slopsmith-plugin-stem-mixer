@@ -1054,7 +1054,7 @@
         if (!controls) return;
         if (mixerButton && document.body.contains(mixerButton)) return;
 
-        const closeBtn = isV3 ? null : controls.querySelector('button:last-child');
+        const closeBtn = isV3 ? null : controls.querySelector(':scope > button:last-of-type');
         const btn = document.createElement('button');
         btn.id = 'btn-stem-mixer';
         btn.className = 'px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition';
