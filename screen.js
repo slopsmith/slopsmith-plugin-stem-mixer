@@ -574,8 +574,19 @@
     }
 
     function hideDefaultStemButtons() {
-        const controls = document.getElementById('player-controls');
-        if (!controls) return;
+        // In v3 the stems plugin mounts #stems-mixer into the host plugin-control
+        // slot (the host also re-homes it out of #player-controls), so search
+        // BOTH containers. Hiding via inline style.display is what the host's
+        // plugin-slot badge/empty-state counter recognises (a CSS-rule hide
+        // alone would leave the element counted as a visible control).
+        let slot = null;
+        if (window.slopsmith && window.slopsmith.uiVersion === 'v3'
+            && window.slopsmith.ui && typeof window.slopsmith.ui.playerControlSlot === 'function') {
+            try { const _s = window.slopsmith.ui.playerControlSlot(); if (_s instanceof Element) slot = _s; }
+            catch (_e) { /* ignore */ }
+        }
+        const containers = [document.getElementById('player-controls'), slot].filter(Boolean);
+        if (!containers.length) return;
 
         const stemTokens = ['stem', 'stems', 'guitar', 'bass', 'voice', 'vocals', 'vocal', 'drums', 'drum', 'piano', 'other'];
         const normalize = (txt) => String(txt || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -586,20 +597,22 @@
             return stemTokens.some(token => n.includes(token));
         };
 
-        const stemsContainer = controls.querySelector('#stems-mixer');
-        if (stemsContainer) {
-            stemsContainer.style.display = 'none';
-            stemsContainer.dataset.stemMixerHidden = '1';
-        }
-
-        controls.querySelectorAll('button, span, div, a').forEach((el) => {
-            if (el.id === 'btn-stem-mixer') return;
-            const txt = (el.textContent || '').trim();
-            if (!txt || txt.length > 18) return;
-            if (looksLikeStemControl(txt)) {
-                el.style.display = 'none';
-                el.dataset.stemMixerHidden = '1';
+        containers.forEach((controls) => {
+            const stemsContainer = controls.querySelector('#stems-mixer');
+            if (stemsContainer) {
+                stemsContainer.style.display = 'none';
+                stemsContainer.dataset.stemMixerHidden = '1';
             }
+
+            controls.querySelectorAll('button, span, div, a').forEach((el) => {
+                if (el.id === 'btn-stem-mixer') return;
+                const txt = (el.textContent || '').trim();
+                if (!txt || txt.length > 18) return;
+                if (looksLikeStemControl(txt)) {
+                    el.style.display = 'none';
+                    el.dataset.stemMixerHidden = '1';
+                }
+            });
         });
     }
 
@@ -607,9 +620,14 @@
         if (hideStylesInstalled) return;
         const style = document.createElement('style');
         style.id = 'stem-mixer-hide-stems-ui';
+        // Cover both the legacy transport and the v3 plugin-control slot, where
+        // the stems plugin now mounts #stems-mixer (host re-homing in v3 also
+        // moves it out of #player-controls), so the hide rule keeps matching.
         style.textContent = [
             '#player-controls #stems-mixer { display: none !important; }',
-            '#player-controls [data-stems-ui] { display: none !important; }'
+            '#player-controls [data-stems-ui] { display: none !important; }',
+            '#v3-plugin-controls-slot #stems-mixer { display: none !important; }',
+            '#v3-plugin-controls-slot [data-stems-ui] { display: none !important; }'
         ].join('\n');
         document.head.appendChild(style);
         hideStylesInstalled = true;
@@ -1017,11 +1035,26 @@
     }
 
     function ensureMixerButton() {
-        const controls = document.getElementById('player-controls');
+        // v3: mount into the host's stable plugin-control slot (Plugins rail
+        // popover). The legacy `button:last-child` anchor resolves to a NESTED
+        // transport button in v3 and would throw on insertBefore; the slot is
+        // always present in v3, so that anchor is only used in the classic UI.
+        const isV3 = !!(window.slopsmith && window.slopsmith.uiVersion === 'v3');
+        let slot = null;
+        if (isV3 && window.slopsmith.ui && typeof window.slopsmith.ui.playerControlSlot === 'function') {
+            try { const _s = window.slopsmith.ui.playerControlSlot(); if (_s instanceof Element) slot = _s; }
+            catch (_e) { /* host slot API failure → fall back to legacy container */ }
+        }
+        // In v3 mount EXCLUSIVELY into the slot. If the slot isn't resolvable
+        // yet, bail rather than append to #player-controls — appending there
+        // would strand the button (the document.body.contains guard below would
+        // then keep it from ever migrating into the slot on a later update).
+        if (isV3 && !slot) return;
+        const controls = slot || document.getElementById('player-controls');
         if (!controls) return;
         if (mixerButton && document.body.contains(mixerButton)) return;
 
-        const closeBtn = controls.querySelector('button:last-child');
+        const closeBtn = isV3 ? null : controls.querySelector('button:last-child');
         const btn = document.createElement('button');
         btn.id = 'btn-stem-mixer';
         btn.className = 'px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition';
