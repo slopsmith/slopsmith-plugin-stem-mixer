@@ -64,6 +64,26 @@
     let stemsBridgeByStem = Object.create(null);
     let stemBootstrapTimers = [];
     let hideStylesInstalled = false;
+    // Cached result of getStemAudioMap(). The stem <audio> elements are stable
+    // for a loaded song; rebuilding the map (querySelectorAll + per-element
+    // regex matching) on every setStemVolume/ensureStemNodes call showed up as
+    // ~5% of main-thread CPU during playback. Invalidated on song change / DOM
+    // mutation (see invalidateStemAudioMap) and cheaply self-validated below.
+    let cachedStemAudioMap = null;
+
+    function invalidateStemAudioMap() {
+        cachedStemAudioMap = null;
+    }
+
+    function isStemAudioMapStale(map) {
+        // A cached map is stale if any element it points at has been detached
+        // from the document (e.g. the player/stem nodes were re-mounted).
+        for (const stem in map) {
+            const audio = map[stem];
+            if (audio && !audio.isConnected) return true;
+        }
+        return false;
+    }
 
     function cloneState(state) {
         return {
@@ -213,6 +233,18 @@
     }
 
     function getStemAudioMap() {
+        // Return the memoized map when it is still valid. The map only changes
+        // when the stem <audio> set changes (song load / stem remount), which
+        // is signalled via invalidateStemAudioMap(); the isConnected check is a
+        // cheap safety net against missed invalidations.
+        if (cachedStemAudioMap && !isStemAudioMapStale(cachedStemAudioMap)) {
+            return cachedStemAudioMap;
+        }
+        cachedStemAudioMap = buildStemAudioMap();
+        return cachedStemAudioMap;
+    }
+
+    function buildStemAudioMap() {
         const map = Object.create(null);
         const audios = document.querySelectorAll('#player audio, #player-controls audio, audio');
         const hasToken = (text, token) => {
@@ -393,10 +425,14 @@
     }
 
     function scheduleStemVolumeBootstrapSync() {
+        // New song: the previous song's stem <audio> elements are being torn
+        // down/replaced, so force a rebuild on the next map read.
+        invalidateStemAudioMap();
         clearStemBootstrapTimers();
         const delays = [120, 320, 650, 1100, 1800];
         delays.forEach((delay) => {
             const timer = setTimeout(() => {
+                invalidateStemAudioMap();
                 const state = getCurrentState();
                 STEM_KEYS.forEach((stem) => {
                     setStemVolume(stem, state.levels[stem], true);
@@ -1099,6 +1135,10 @@
     }
 
     function queueUiUpdate() {
+        // A relevant DOM mutation (or a song load) may have swapped out the
+        // stem <audio> elements, so drop the cached map and let it rebuild
+        // lazily on the next getStemAudioMap() call.
+        invalidateStemAudioMap();
         if (uiUpdateTimer) clearTimeout(uiUpdateTimer);
         uiUpdateTimer = setTimeout(() => {
             uiUpdateTimer = null;
